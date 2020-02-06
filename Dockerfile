@@ -1,6 +1,10 @@
-FROM php:7.3.9-fpm-alpine3.10
+FROM composer:1.9 as composer
+ARG COMPOSER_FLAGS='--prefer-dist --ignore-platform-reqs --optimize-autoloader'
+ENV COMPOSER_FLAGS=${COMPOSER_FLAGS}
 
-LABEL maintainer="Ric Harvey <ric@ngd.io>"
+RUN mkdir /ppm && cd /ppm && composer ${COMPOSER_FLAGS} require php-pm/php-pm:2.0.3
+
+FROM php:7.3.9-fpm-alpine3.10
 
 ENV php_conf /usr/local/etc/php-fpm.conf
 ENV fpm_conf /usr/local/etc/php-fpm.d/www.conf
@@ -171,6 +175,8 @@ RUN echo @testing http://nl.alpinelinux.org/alpine/edge/testing >> /etc/apk/repo
     openssh-client \
     wget \
     supervisor \
+    youtube-dl \
+    ffmpeg \
     curl \
     libcurl \
     libzip-dev \
@@ -206,10 +212,17 @@ RUN echo @testing http://nl.alpinelinux.org/alpine/edge/testing >> /etc/apk/repo
       --with-jpeg-dir=/usr/include/ && \
     #curl iconv session
     #docker-php-ext-install pdo_mysql pdo_sqlite mysqli mcrypt gd exif intl xsl json soap dom zip opcache && \
-    docker-php-ext-install iconv pdo_mysql pdo_sqlite pgsql pdo_pgsql mysqli gd exif intl xsl json soap dom zip opcache && \
+    docker-php-ext-install iconv pdo_mysql pdo_sqlite pgsql pdo_pgsql mysqli gd exif intl xsl json soap dom zip opcache \ 
+	curl mbstring mcrypt bcmath openssl tokenizer simplexml posix pcntl zlib xml sockets xmlwriter phar && \
     pecl install xdebug-2.7.2 && \
     pecl install -o -f redis && \
     echo "extension=redis.so" > /usr/local/etc/php/conf.d/redis.ini && \
+    pecl install -o -f imagick && \
+    echo "extension=imagick.so" > /usr/local/etc/php/conf.d/imagick.ini && \
+	pecl install -o -f igbinary && \
+    echo "extension=igbinary.so" > /usr/local/etc/php/conf.d/igbinary.ini && \
+	pecl install -o -f swoole && \
+    echo "extension=swoole.so" > /usr/local/etc/php/conf.d/swoole.ini && \
     docker-php-source delete && \
     mkdir -p /etc/nginx && \
     mkdir -p /var/www/app && \
@@ -242,10 +255,10 @@ ADD conf/nginx-site-ssl.conf /etc/nginx/sites-available/default-ssl.conf
 RUN ln -s /etc/nginx/sites-available/default.conf /etc/nginx/sites-enabled/default.conf
 
 # Add GeoLite2 databases (https://dev.maxmind.com/geoip/geoip2/geolite2/)
-RUN curl -fSL http://geolite.maxmind.com/download/geoip/database/GeoLite2-City.mmdb.gz -o /etc/nginx/GeoLite2-City.mmdb.gz \
-    && curl -fSL http://geolite.maxmind.com/download/geoip/database/GeoLite2-Country.mmdb.gz -o /etc/nginx/GeoLite2-Country.mmdb.gz \
-    && gunzip /etc/nginx/GeoLite2-City.mmdb.gz \
-    && gunzip /etc/nginx/GeoLite2-Country.mmdb.gz
+#RUN curl -fSL http://geolite.maxmind.com/download/geoip/database/GeoLite2-City.mmdb.gz -o /etc/nginx/GeoLite2-City.mmdb.gz \
+#    && curl -fSL http://geolite.maxmind.com/download/geoip/database/GeoLite2-Country.mmdb.gz -o /etc/nginx/GeoLite2-Country.mmdb.gz \
+#    && gunzip /etc/nginx/GeoLite2-City.mmdb.gz \
+#    && gunzip /etc/nginx/GeoLite2-Country.mmdb.gz
 
 # tweak php-fpm config
 RUN echo "cgi.fix_pathinfo=0" > ${php_vars} &&\
@@ -271,6 +284,9 @@ RUN echo "cgi.fix_pathinfo=0" > ${php_vars} &&\
 #    ln -s /etc/php7/php.ini /etc/php7/conf.d/php.ini && \
 #    find /etc/php7/conf.d/ -name "*.ini" -exec sed -i -re 's/^(\s*)#(.*)/\1;\2/g' {} \;
 
+
+# Add PHP-PM
+COPY --from=composer /ppm /ppm
 
 # Add Scripts
 ADD scripts/start.sh /start.sh
